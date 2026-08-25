@@ -1,9 +1,12 @@
 use std::fs::File;
 use sdl2::event::Event;
 use crate::chip8::Chip8;
+use crate::desktop_frontend::draw_screen;
 
 pub mod chip8;
 mod desktop_frontend;
+
+const TICKS_PER_FRAME: usize = 10;
 
 fn main() {
     //Prep Sdl2 canvas
@@ -25,14 +28,18 @@ fn main() {
 
     _emulator.load_rom("./.roms/test_opcode.ch8").expect("Could not load file");
 
-    'gameloop: loop {
+    'game_loop: loop {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. } => break 'gameloop,
+                Event::Quit { .. } => break 'game_loop,
                 _ => {}
             }
         }
 
-        _emulator.cycle();
+        for _ in 0..TICKS_PER_FRAME {
+            _emulator.cycle();
+        }
+        _emulator.cycle_timers();
+        draw_screen(&mut canvas, _emulator.get_display());
     }
 }

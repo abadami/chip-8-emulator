@@ -5,9 +5,9 @@ use rand::prelude::*;
 const START_ADDRESS: u16 = 0x200;
 const FONT_SET_START_ADDRESS: u16 = 0x50;
 const FONT_SET_SIZE: usize = 80;
-const VIDEO_HEIGHT: u8 = 32;
-const VIDEO_WIDTH: u8 = 64;
-const VIDEO_SIZE: usize = VIDEO_HEIGHT as usize * VIDEO_WIDTH as usize;
+pub const VIDEO_HEIGHT: u8 = 32;
+pub const VIDEO_WIDTH: u8 = 64;
+pub const VIDEO_SIZE: usize = VIDEO_HEIGHT as usize * VIDEO_WIDTH as usize;
 
 const FONT_SET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -82,6 +82,18 @@ impl Chip8 {
         //decode & execute
         self.execute(self.opcode);
     }
+    
+    pub fn cycle_timers(&mut self) {
+        if (self.delay_timer > 0) {
+            self.delay_timer -= 1;
+        }
+        if (self.sound_timer > 0) {
+            if (self.sound_timer == 1) {
+                // BEEP
+            }
+            self.sound_timer -= 1;
+        }
+    }
 
     pub fn load_rom(&mut self, filename: &str) -> std::io::Result<()> {
         let file = File::open(filename)?;
@@ -91,6 +103,10 @@ impl Chip8 {
         }
 
         Ok(())
+    }
+
+    pub fn get_display(&self) -> &[u32; VIDEO_SIZE] {
+        &self.video
     }
 
     fn fetch(&mut self) -> u16 {
