@@ -7,6 +7,7 @@ const FONT_SET_START_ADDRESS: u16 = 0x50;
 const FONT_SET_SIZE: usize = 80;
 const VIDEO_HEIGHT: u8 = 32;
 const VIDEO_WIDTH: u8 = 64;
+const VIDEO_SIZE: usize = VIDEO_HEIGHT as usize * VIDEO_WIDTH as usize;
 
 const FONT_SET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -74,6 +75,14 @@ impl Chip8 {
         emulator_data
     }
 
+    pub fn cycle(&mut self) {
+        //fetch
+        self.opcode = self.fetch();
+
+        //decode & execute
+        self.execute(self.opcode);
+    }
+
     pub fn load_rom(&mut self, filename: &str) -> std::io::Result<()> {
         let file = File::open(filename)?;
 
@@ -84,29 +93,80 @@ impl Chip8 {
         Ok(())
     }
 
+    fn fetch(&mut self) -> u16 {
+        let opcode = (self.memory[self.program_counter as usize] as u16) << 8 | (self.memory[(self.program_counter + 1) as usize] as u16);
+        self.program_counter += 2;
+        opcode
+    }
+
+    fn execute(&mut self, op: u16) {
+        let digit1 = (op & 0xF000) >> 12;
+        let digit2 = (op & 0x0F00) >> 8;
+        let digit3 = (op & 0x00F0) >> 4;
+        let digit4 = op & 0x000F;
+
+        match (digit1, digit2, digit3, digit4) {
+            (0, 0, 0, 0) => (),
+            (0, 0, 0xE, 0) => self.cls(),
+            (0, 0, 0xE, 0xE) => self.ret(),
+            (1, _, _, _) => self.jp(),
+            (2, _, _, _) => self.call(),
+            (3, _, _, _) => self.skip_equal(),
+            (4, _, _, _) => self.skip_not_equal(),
+            (5, _, _, 0) => self.skip_if_variables_equal(),
+            (6, _, _, _) => self.load_variable(),
+            (7, _, _, _) => self.add_variable(),
+            (8, _, _, 0) => self.load_variable_from_variable(),
+            (8, _, _, 1) => self.or_variables(),
+            (8, _, _, 2) => self.and_variables(),
+            (8, _, _, 3) => self.xor_variables(),
+            (8, _, _, 4) => self.add_variables(),
+            (8, _, _, 5) => self.subtract_variables(),
+            (8, _, _, 6) => self.right_shift(),
+            (8, _, _, 7) => self.subtract_variables_n(),
+            (8, _, _, 0xE) => self.shift_left(),
+            (9, _, _, 0) => self.skip_next_instruction_ne(),
+            (0xA, _, _, _) => self.load_index(),
+            (0xB, _, _, _) => self.jump_to_location(),
+            (0xC, _, _, _) => self.random_byte(),
+            (0xD, _, _, _) => self.draw(),
+            (0xE, _, 9, 0xE) => self.skip_next_instruction_if_key(),
+            (0xE, _, 0xA, 1) => self.skip_next_instruction_if_not_key(),
+            (0xF, _, 0, 0xA) => self.wait_for_keypress(),
+            (0xF, _, 1, 5) => self.delay_timer(),
+            (0xF, _, 1, 8) => self.sound_timer(),
+            (0xF, _, 1, 0xE) => self.add_to_index(),
+            (0xF, _, 2, 9) => self.load_font(),
+            (0xF, _, 3, 3) => self.store_bcd_representation(),
+            (0xF, _, 5, 5) => self.store_up_to_variable(),
+            (0xF, _, 6, 5) => self.read_up_to_variable(),
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
+        }
+    }
+
     fn rand_byte(&mut self) -> u8 {
         self.random_gen.random_range(0..255) as u8
     }
 
-    // CLS
+    // 00E0 - CLS
     fn cls(&mut self) -> () {
         self.video.fill(0);
     }
 
-    // RET
+    // 00EE - RET
     fn ret(&mut self) -> () {
         self.stack_pointer -= 1;
         self.program_counter = self.stack[self.stack_pointer as usize];
     }
 
-    // JP
+    // 1nnn - JP
     fn jp(&mut self) -> () {
         let address = self.opcode & 0x0FFF;
 
         self.program_counter = address;
     }
 
-    // CALL
+    // 2nnn - CALL
     fn call(&mut self) -> () {
         let address = self.opcode & 0x0FFF;
 
