@@ -38,7 +38,7 @@ pub struct Chip8 {
     delay_timer: u8,
     sound_timer: u8,
     keypad: [u8; 16],
-    video: [u32; 64 * 32],
+    video: [u32; VIDEO_SIZE],
     opcode: u16,
     random_gen: ThreadRng,
 }
@@ -180,7 +180,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let byte = self.opcode & 0x00FF;
 
-        if (self.registers[variable_x as usize] == byte as u8) {
+        if self.registers[variable_x as usize] == byte as u8 {
             self.program_counter += 2;
         }
     }
@@ -190,7 +190,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let byte = self.opcode & 0x00FF;
 
-        if (self.registers[variable_x as usize] != byte as u8) {
+        if self.registers[variable_x as usize] != byte as u8 {
             self.program_counter += 2;
         }
     }
@@ -200,7 +200,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
 
-        if (self.registers[variable_x as usize] == self.registers[variable_y as usize]) {
+        if self.registers[variable_x as usize] == self.registers[variable_y as usize] {
             self.program_counter += 2;
         }
     }
@@ -272,7 +272,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
 
-        if (self.registers[variable_x as usize] > self.registers[variable_y as usize]) {
+        if self.registers[variable_x as usize] > self.registers[variable_y as usize] {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
@@ -286,7 +286,7 @@ impl Chip8 {
     fn right_shift(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
 
-        self.registers[0xF] = (self.registers[variable_x as usize] & 0x1);
+        self.registers[0xF] = self.registers[variable_x as usize] & 0x1;
 
         self.registers[variable_x as usize] >>= 1;
     }
@@ -296,7 +296,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
 
-        if (self.registers[variable_y as usize] > self.registers[variable_x as usize]) {
+        if self.registers[variable_y as usize] > self.registers[variable_x as usize] {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
@@ -319,7 +319,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
 
-        if (self.registers[variable_y as usize] != self.registers[variable_x as usize]) {
+        if self.registers[variable_y as usize] != self.registers[variable_x as usize] {
             self.program_counter += 2;
         }
     }
@@ -350,7 +350,7 @@ impl Chip8 {
     fn draw(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
-        let height = (self.opcode & 0x0F00);
+        let height = self.opcode & 0x0F00;
 
         let position_x = self.registers[variable_x as usize] % VIDEO_WIDTH;
         let position_y = self.registers[variable_y as usize] % VIDEO_HEIGHT;
@@ -365,7 +365,7 @@ impl Chip8 {
                 let screen_pixel: &mut u32 = &mut self.video[((position_y + (row as u8)) * VIDEO_WIDTH + (position_x + col)) as usize];
 
                 if sprite_pixel > 0 {
-                    if (*screen_pixel == 0xFFFFFFFF) {
+                    if *screen_pixel == 0xFFFFFFFF {
                         self.registers[0xF] = 1;
                     }
 
@@ -380,7 +380,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let key = self.registers[variable_x as usize];
 
-        if (self.keypad[key as usize] > 0) {
+        if self.keypad[key as usize] > 0 {
             self.program_counter += 2;
         }
     }
@@ -391,7 +391,7 @@ impl Chip8 {
 
         let key = self.registers[variable_x as usize];
 
-        if (self.keypad[key as usize] == 0) {
+        if self.keypad[key as usize] == 0 {
             self.program_counter += 2;
         }
     }
@@ -400,37 +400,37 @@ impl Chip8 {
     fn wait_for_keypress(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
 
-        if (self.keypad[0] > 0) {
+        if self.keypad[0] > 0 {
             self.registers[variable_x as usize] = 0;
-        } else if (self.keypad[1] > 0) {
+        } else if self.keypad[1] > 0 {
             self.registers[variable_x as usize] = 1;
-        } else if (self.keypad[2] > 0) {
+        } else if self.keypad[2] > 0 {
             self.registers[variable_x as usize] = 2;
-        } else if (self.keypad[3] > 0) {
+        } else if self.keypad[3] > 0 {
             self.registers[variable_x as usize] = 3;
-        } else if (self.keypad[4] > 0) {
+        } else if self.keypad[4] > 0 {
             self.registers[variable_x as usize] = 4;
-        } else if (self.keypad[5] > 0) {
+        } else if self.keypad[5] > 0 {
             self.registers[variable_x as usize] = 5;
-        } else if (self.keypad[6] > 0) {
+        } else if self.keypad[6] > 0 {
             self.registers[variable_x as usize] = 6;
-        } else if (self.keypad[7] > 0) {
+        } else if self.keypad[7] > 0 {
             self.registers[variable_x as usize] = 7;
-        } else if (self.keypad[8] > 0) {
+        } else if self.keypad[8] > 0 {
             self.registers[variable_x as usize] = 8;
-        } else if (self.keypad[9] > 0) {
+        } else if self.keypad[9] > 0 {
             self.registers[variable_x as usize] = 9;
-        } else if (self.keypad[10] > 0) {
+        } else if self.keypad[10] > 0 {
             self.registers[variable_x as usize] = 10;
-        } else if (self.keypad[11] > 0) {
+        } else if self.keypad[11] > 0 {
             self.registers[variable_x as usize] = 11;
-        } else if (self.keypad[12] > 0) {
+        } else if self.keypad[12] > 0 {
             self.registers[variable_x as usize] = 12;
-        } else if (self.keypad[13] > 0) {
+        } else if self.keypad[13] > 0 {
             self.registers[variable_x as usize] = 13;
-        } else if (self.keypad[14] > 0) {
+        } else if self.keypad[14] > 0 {
             self.registers[variable_x as usize] = 14;
-        } else if (self.keypad[15] > 0) {
+        } else if self.keypad[15] > 0 {
             self.registers[variable_x as usize] = 15;
         } else {
             self.program_counter -= 2;
