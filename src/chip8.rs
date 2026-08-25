@@ -218,7 +218,7 @@ impl Chip8 {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let byte = self.opcode & 0x00FF;
 
-        self.registers[variable_x as usize] += byte as u8;
+        self.registers[variable_x as usize] = self.registers[variable_x as usize].wrapping_add(byte as u8);
     }
 
     // 8xy0 - LD Vx, Vy
@@ -278,7 +278,7 @@ impl Chip8 {
             self.registers[0xF] = 0;
         }
 
-        self.registers[variable_x as usize] -= self.registers[variable_y as usize];
+        self.registers[variable_x as usize] = self.registers[variable_y as usize].wrapping_sub(variable_y as u8);
 
     }
 
@@ -352,17 +352,20 @@ impl Chip8 {
         let variable_y = (self.opcode & 0x00F0) >> 4;
         let height = self.opcode & 0x0F00;
 
-        let position_x = self.registers[variable_x as usize] % VIDEO_WIDTH;
-        let position_y = self.registers[variable_y as usize] % VIDEO_HEIGHT;
+        let position_x = (self.registers[variable_x as usize] % VIDEO_WIDTH) as usize;
+        let position_y = (self.registers[variable_y as usize] % VIDEO_HEIGHT) as usize;
 
         self.registers[0xF] = 0;
 
         for row in 0..height {
             let sprite_byte = self.memory[(self.index + row) as usize];
+            let py = ((position_y + (row as usize)) % (VIDEO_HEIGHT as usize));
 
             for col in 0..8 {
+                let px = (position_x + col) % (VIDEO_WIDTH as usize);
+                let idx = py * (VIDEO_WIDTH as usize) + px;
                 let sprite_pixel = sprite_byte & (0x80 >> col);
-                let screen_pixel: &mut u32 = &mut self.video[((position_y + (row as u8)) * VIDEO_WIDTH + (position_x + col)) as usize];
+                let screen_pixel: &mut u32 = &mut self.video[idx];
 
                 if sprite_pixel > 0 {
                     if *screen_pixel == 0xFFFFFFFF {
