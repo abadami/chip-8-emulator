@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use rand::prelude::*;
 
 const START_ADDRESS: u16 = 0x200;
@@ -96,7 +96,7 @@ impl Chip8 {
     }
 
     pub fn load_rom(&mut self, filename: &str) -> std::io::Result<()> {
-        let file = File::open(filename)?;
+        let file = BufReader::new(File::open(filename)?);
 
         for (index, byte) in file.bytes().enumerate() {
             self.memory[0x200 + index] = byte.unwrap_or_default();
@@ -109,6 +109,10 @@ impl Chip8 {
         &self.video
     }
 
+    pub fn key_press(&mut self, key: u8, pressed: bool) {
+        self.keypad[key as usize] = if pressed { 1 } else { 0 };
+    }
+    
     fn fetch(&mut self) -> u16 {
         let opcode = (self.memory[self.program_counter as usize] as u16) << 8 | (self.memory[(self.program_counter + 1) as usize] as u16);
         self.program_counter += 2;
@@ -149,6 +153,7 @@ impl Chip8 {
             (0xE, _, 9, 0xE) => self.skip_next_instruction_if_key(),
             (0xE, _, 0xA, 1) => self.skip_next_instruction_if_not_key(),
             (0xF, _, 0, 0xA) => self.wait_for_keypress(),
+            (0xF, _, 0, 7) => self.load_delay_timer(),
             (0xF, _, 1, 5) => self.delay_timer(),
             (0xF, _, 1, 8) => self.sound_timer(),
             (0xF, _, 1, 0xE) => self.add_to_index(),
@@ -161,7 +166,7 @@ impl Chip8 {
     }
 
     fn rand_byte(&mut self) -> u8 {
-        self.random_gen.random_range(0..255) as u8
+        self.random_gen.random_range(0..=255) as u8
     }
 
     // 00E0 - CLS
@@ -194,9 +199,9 @@ impl Chip8 {
     // 3xkk - SE Vx, byte
     fn skip_equal(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
-        let byte = self.opcode & 0x00FF;
+        let byte = (self.opcode & 0x00FF) as u8;
 
-        if self.registers[variable_x as usize] == byte as u8 {
+        if self.registers[variable_x as usize] == byte {
             self.program_counter += 2;
         }
     }
@@ -204,9 +209,9 @@ impl Chip8 {
     // 4xkk - SNE Vx, byte
     fn skip_not_equal(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
-        let byte = self.opcode & 0x00FF;
+        let byte = (self.opcode & 0x00FF) as u8;
 
-        if self.registers[variable_x as usize] != byte as u8 {
+        if self.registers[variable_x as usize] != byte {
             self.program_counter += 2;
         }
     }
@@ -224,9 +229,9 @@ impl Chip8 {
     // 6xkk - LD Vx, byte
     fn load_variable(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
-        let byte = self.opcode & 0x00FF;
+        let byte = (self.opcode & 0x00FF) as u8;
 
-        self.registers[variable_x as usize] = byte as u8;
+        self.registers[variable_x as usize] = byte;
     }
 
     // 7xkk - ADD Vx, byte
@@ -255,46 +260,48 @@ impl Chip8 {
 
     // 8xy2 - AND Vx, Vy
     fn and_variables(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let variable_y = (self.opcode & 0x00F0) >> 4;
-        self.registers[variable_x as usize] &= self.registers[variable_y as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let variable_y = ((self.opcode & 0x00F0) >> 4) as usize;
+        self.registers[variable_x] &= self.registers[variable_y];
     }
 
     // 8xy3 - XOR Vx, Vy
     fn xor_variables(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let variable_y = (self.opcode & 0x00F0) >> 4;
-        self.registers[variable_x as usize] ^= self.registers[variable_y as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let variable_y = ((self.opcode & 0x00F0) >> 4) as usize;
+        self.registers[variable_x] ^= self.registers[variable_y];
     }
 
     // 8xy4 - ADD Vx, Vy
     fn add_variables(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let variable_y = (self.opcode & 0x00F0) >> 4;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let variable_y = ((self.opcode & 0x00F0) >> 4) as usize;
 
-        let sum = (self.registers[variable_y as usize] as u16) + (self.registers[variable_x as usize] as u16);
+        let (sum, carry) = self.registers[variable_x].overflowing_add(self.registers[variable_y]);
 
-        if sum > 255 {
+        if carry {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
 
-        self.registers[variable_x as usize] = (sum & 0xFF) as u8;
+        self.registers[variable_x] = sum & 0xFF;
     }
 
     // 8xy5 - SUB Vx, Vy
     fn subtract_variables(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let variable_y = (self.opcode & 0x00F0) >> 4;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let variable_y = ((self.opcode & 0x00F0) >> 4) as usize;
 
-        if self.registers[variable_x as usize] > self.registers[variable_y as usize] {
+        let (new_variable_x, borrow) = self.registers[variable_x].overflowing_sub(self.registers[variable_y]);
+
+        if !borrow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
 
-        self.registers[variable_x as usize] = self.registers[variable_y as usize].wrapping_sub(variable_y as u8);
+        self.registers[variable_x] = new_variable_x;
 
     }
 
@@ -309,16 +316,18 @@ impl Chip8 {
 
     // 8xy7 - SUBN Vx, Vy
     fn subtract_variables_n(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let variable_y = (self.opcode & 0x00F0) >> 4;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let variable_y = ((self.opcode & 0x00F0) >> 4) as usize;
 
-        if self.registers[variable_y as usize] > self.registers[variable_x as usize] {
+        let (new_variable_y, borrow) = self.registers[variable_y].overflowing_sub(self.registers[variable_x]);
+
+        if !borrow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
 
-        self.registers[variable_x as usize] -= self.registers[variable_y as usize];
+        self.registers[variable_x] = new_variable_y;
     }
 
     // 8xyE - SHL Vx {, Vy}
@@ -366,7 +375,7 @@ impl Chip8 {
     fn draw(&mut self) -> () {
         let variable_x = (self.opcode & 0x0F00) >> 8;
         let variable_y = (self.opcode & 0x00F0) >> 4;
-        let height = self.opcode & 0x0F00;
+        let height = self.opcode & 0x000F;
 
         let position_x = (self.registers[variable_x as usize] % VIDEO_WIDTH) as usize;
         let position_y = (self.registers[variable_y as usize] % VIDEO_HEIGHT) as usize;
@@ -406,51 +415,58 @@ impl Chip8 {
 
     // ExA1 - SKNP Vx
     fn skip_next_instruction_if_not_key(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
 
-        let key = self.registers[variable_x as usize];
+        let key = self.registers[variable_x];
 
         if self.keypad[key as usize] == 0 {
             self.program_counter += 2;
         }
     }
 
+    // Fx07 - LD Vx, DT
+    fn load_delay_timer(&mut self) -> () {
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+
+        self.registers[variable_x] = self.delay_timer;
+    }
+
     // Fx0A - LD Vx, K
     fn wait_for_keypress(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
 
         if self.keypad[0] > 0 {
-            self.registers[variable_x as usize] = 0;
+            self.registers[variable_x] = 0;
         } else if self.keypad[1] > 0 {
-            self.registers[variable_x as usize] = 1;
+            self.registers[variable_x] = 1;
         } else if self.keypad[2] > 0 {
-            self.registers[variable_x as usize] = 2;
+            self.registers[variable_x] = 2;
         } else if self.keypad[3] > 0 {
-            self.registers[variable_x as usize] = 3;
+            self.registers[variable_x] = 3;
         } else if self.keypad[4] > 0 {
-            self.registers[variable_x as usize] = 4;
+            self.registers[variable_x] = 4;
         } else if self.keypad[5] > 0 {
-            self.registers[variable_x as usize] = 5;
+            self.registers[variable_x] = 5;
         } else if self.keypad[6] > 0 {
-            self.registers[variable_x as usize] = 6;
+            self.registers[variable_x] = 6;
         } else if self.keypad[7] > 0 {
-            self.registers[variable_x as usize] = 7;
+            self.registers[variable_x] = 7;
         } else if self.keypad[8] > 0 {
-            self.registers[variable_x as usize] = 8;
+            self.registers[variable_x] = 8;
         } else if self.keypad[9] > 0 {
-            self.registers[variable_x as usize] = 9;
+            self.registers[variable_x] = 9;
         } else if self.keypad[10] > 0 {
-            self.registers[variable_x as usize] = 10;
+            self.registers[variable_x] = 10;
         } else if self.keypad[11] > 0 {
-            self.registers[variable_x as usize] = 11;
+            self.registers[variable_x] = 11;
         } else if self.keypad[12] > 0 {
-            self.registers[variable_x as usize] = 12;
+            self.registers[variable_x] = 12;
         } else if self.keypad[13] > 0 {
-            self.registers[variable_x as usize] = 13;
+            self.registers[variable_x] = 13;
         } else if self.keypad[14] > 0 {
-            self.registers[variable_x as usize] = 14;
+            self.registers[variable_x] = 14;
         } else if self.keypad[15] > 0 {
-            self.registers[variable_x as usize] = 15;
+            self.registers[variable_x] = 15;
         } else {
             self.program_counter -= 2;
         }
@@ -458,59 +474,59 @@ impl Chip8 {
 
     // Fx15 - LD DT, Vx
     fn delay_timer(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        self.delay_timer = self.registers[variable_x as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        self.delay_timer = self.registers[variable_x];
     }
 
     // Fx18 - LD ST, Vx
     fn sound_timer(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        self.sound_timer = self.registers[variable_x as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        self.sound_timer = self.registers[variable_x];
     }
 
     // Fx1E - ADD I, Vx
     fn add_to_index(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        self.index += self.registers[variable_x as usize] as u16;
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        self.index += self.registers[variable_x] as u16;
     }
 
     // Fx29 - LD F, Vx
     fn load_font(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let digit = self.registers[variable_x as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let digit = self.registers[variable_x];
 
         self.index = FONT_SET_START_ADDRESS + (5 * (digit as u16));
     }
 
     // Fx33 - LD B, Vx
     fn store_bcd_representation(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
-        let mut value = self.registers[variable_x as usize];
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let mut value = self.registers[variable_x];
 
-        self.memory[(self.index + 2) as usize] = value % 10;
+        self.memory[(self.index as usize + 2)] = value % 10;
         value /= 10;
 
-        self.memory[(self.index + 1) as usize] = value % 10;
+        self.memory[(self.index as usize + 1)] = value % 10;
         value /= 10;
 
         self.memory[self.index as usize] = value % 10;
     }
 
     // Fx55 - LD [I], Vx
-    fn store_up_to_variable(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
+    fn store_up_to_variable(&mut self) {
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
 
         for i in 0..=variable_x {
-            self.memory[(self.index + i) as usize] = self.registers[i as usize];
+            self.memory[(self.index as usize + i)] = self.registers[i];
         }
     }
 
     // Fx65 - LD Vx, [I]
-    fn read_up_to_variable(&mut self) -> () {
-        let variable_x = (self.opcode & 0x0F00) >> 8;
+    fn read_up_to_variable(&mut self) {
+        let variable_x = ((self.opcode & 0x0F00) >> 8) as usize;
 
         for i in 0..=variable_x {
-            self.registers[i as usize] = self.memory[(self.index + i) as usize];
+            self.registers[i] = self.memory[(self.index as usize + i)];
         }
     }
 }
