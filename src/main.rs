@@ -1,4 +1,3 @@
-use std::fs::File;
 use sdl2::event::Event;
 use crate::chip8::Chip8;
 use crate::desktop_frontend::draw_screen;
