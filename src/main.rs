@@ -1,6 +1,6 @@
 use sdl2::event::Event;
 use crate::chip8::Chip8;
-use crate::desktop_frontend::draw_screen;
+use crate::desktop_frontend::{DesktopFrontend};
 
 pub mod chip8;
 mod desktop_frontend;
@@ -9,27 +9,16 @@ const TICKS_PER_FRAME: usize = 30;
 
 fn main() {
     //Prep Sdl2 canvas
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-    video_subsystem.text_input().stop();
-    let window = video_subsystem
-        .window("Chip8 Emulator", 640, 320)
-        .position_centered()
-        .build()
-        .unwrap();
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
-
-    let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut frontend = DesktopFrontend::new();
 
     let mut _emulator = Chip8::new();
 
-    canvas.clear();
-    canvas.present();
+   frontend.clear();
 
     _emulator.load_rom("./.roms/tetris.ch8").expect("Could not load file");
 
     'game_loop: loop {
-        for event in event_pump.poll_iter() {
+        for event in frontend.get_event_pump().poll_iter() {
             match event {
                 Event::Quit { .. } => break 'game_loop,
                 Event::KeyDown { keycode: Some(key), .. } => {
@@ -50,6 +39,6 @@ fn main() {
             _emulator.cycle();
         }
         _emulator.cycle_timers();
-        draw_screen(&mut canvas, _emulator.get_display());
+        frontend.draw_screen(_emulator.get_display());
     }
 }
