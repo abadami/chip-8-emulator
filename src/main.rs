@@ -8,17 +8,21 @@ mod desktop_frontend;
 const TICKS_PER_FRAME: usize = 30;
 
 fn main() {
+    let args = std::env::args().collect::<Vec<String>>();
+
+    let file_path = &args[1];
+
     //Prep Sdl2 canvas
-    let mut frontend = DesktopFrontend::new();
+    let mut desktop = DesktopFrontend::new();
 
     let mut _emulator = Chip8::new();
 
-   frontend.clear();
+    desktop.clear();
 
-    _emulator.load_rom("./.roms/tetris.ch8").expect("Could not load file");
+    _emulator.load_rom(file_path).expect("Could not load file");
 
     'game_loop: loop {
-        for event in frontend.get_event_pump().poll_iter() {
+        for event in desktop.get_event_pump().poll_iter() {
             match event {
                 Event::Quit { .. } => break 'game_loop,
                 Event::KeyDown { keycode: Some(key), .. } => {
@@ -39,6 +43,6 @@ fn main() {
             _emulator.cycle();
         }
         _emulator.cycle_timers();
-        frontend.draw_screen(_emulator.get_display());
+        desktop.draw_screen(_emulator.get_display());
     }
 }
