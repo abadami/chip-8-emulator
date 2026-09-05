@@ -104,6 +104,38 @@ impl Chip8 {
 
         Ok(())
     }
+    
+    pub fn load_emulator_state(&mut self, state: &Chip8) {
+        self.registers = state.registers;
+        self.index = state.index;
+        self.program_counter = state.program_counter;
+        self.stack_pointer = state.stack_pointer;
+        self.memory = state.memory;
+        self.random_gen = state.random_gen.clone();
+        self.video = state.video;
+        self.opcode = state.opcode;
+        self.keypad = state.keypad;
+        self.delay_timer = state.delay_timer;
+        self.sound_timer = state.sound_timer;
+        self.stack = state.stack;
+    }
+    
+    pub fn get_current_state(&self) -> Chip8 {
+        Chip8 {
+            stack: self.stack,
+            registers: self.registers,
+            index: self.index,
+            program_counter: self.program_counter,
+            memory: self.memory,
+            random_gen: self.random_gen.clone(),
+            video: self.video,
+            delay_timer: self.delay_timer,
+            sound_timer: self.sound_timer,
+            stack_pointer: self.stack_pointer,
+            keypad: self.keypad,
+            opcode: self.opcode,
+        }
+    }
 
     pub fn get_display(&self) -> &[u32; VIDEO_SIZE] {
         &self.video
